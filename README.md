@@ -4,6 +4,8 @@ Perform deep research on a specific topic and compile a final report with the ab
 
 This plugin uses **Brave Search** (via n8n webhook) and a **Plugin Server** for reading web pages. You need to provide an n8n token and a Plugin Server URL to start using it.
 
+_This is my own fork of the official Deep Research plugin, using my own setup._
+
 ### Setup
 
 1. **n8n Token**: Token for authenticating the n8n webhook that triggers the Brave Search workflow.
