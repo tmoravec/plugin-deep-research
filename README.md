@@ -2,13 +2,17 @@
 
 Perform deep research on a specific topic and compile a final report with the ability to draft a research plan, search the web, and read web pages.
 
-This plugin uses **Serp API** and **Firecrawl API**. You need to provide API keys from both services to start using it.
+This plugin uses **Brave Search** (via n8n webhook) and a **Plugin Server** for reading web pages. You need to provide an n8n token and a Plugin Server URL to start using it.
+
+### Setup
+
+1. **n8n Token**: Token for authenticating the n8n webhook that triggers the Brave Search workflow.
+2. **Plugin Server URL**: The URL of your Plugin Server instance used to read web page content. [Learn how to deploy a Plugin Server](https://docs.typingmind.com/plugins/plugins-server/how-to-deploy-plugins-server-on-render).
 
 ### Research Mode
 
-- **Lightweight Mode**: In lightweight mode, Deep Research will attempt to extract data from online sources using the extract tool from Firecrawl, which saves tokens at a cost of reduced data accuracy. This is the default mode.
-- **Comprehensive Mode**: Deep Research will read the full content of the online sources to determine the final answer. If the web pages have a lot of content, it can risk consuming a lot of tokens, which is expensive and may exceed the model's context length limit.
-- **Dynamic Mode**: Deep Research will run in Lightweight Mode by default, but may opt in to read full web page content when absolutely needed to get the most accurate answer.
+- **Lightweight Mode**: Deep Research uses search result snippets from Brave Search to gather information. Web pages are only read when snippets don't contain enough detail. This is the default mode.
+- **Comprehensive Mode**: Deep Research reads the full content of each relevant web page to ensure the most accurate and complete answer. This consumes more tokens and may take longer.
 
 ### Customizable
 The Deep Research plugin is customizable. You can duplicate this plugin and add your own tools to enhance the quality of the final report. The system instructions and prompts are also available in the plugin source.

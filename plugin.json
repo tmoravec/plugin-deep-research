@@ -6,18 +6,19 @@
   "oauthConfig": null,
   "userSettings": [
     {
-      "name": "serpAPIKey",
+      "name": "n8n_token",
       "type": "password",
-      "label": "Serp API Key",
+      "label": "n8n Token",
       "required": true,
-      "description": "Serp API is used for the Web Search tool. Sign up from serpapi.com to get an API key."
+      "description": "Token for authenticating the n8n webhook that triggers the Brave Search workflow."
     },
     {
-      "name": "firecrawlApiKey",
-      "type": "password",
-      "label": "Firecrawl API Key",
+      "name": "pluginServer",
+      "type": "text",
+      "label": "Plugin Server URL",
       "required": true,
-      "description": "Firecrawl API is used for the Read Web Page tool. Get your API key at https://www.firecrawl.dev/app/api-keys"
+      "description": "The URL of the Plugin Server used to read web page content. Example: https://your-plugin-server.example.com",
+      "placeholder": "https://..."
     },
     {
       "name": "researchMode",
@@ -25,10 +26,9 @@
       "label": "Research Mode",
       "values": [
         "Lightweight mode",
-        "Comprehensive mode",
-        "Dynamic mode"
+        "Comprehensive mode"
       ],
-      "description": "Select \"Comprehensive mode\" if you prefer to have more accurate result (consume more tokens). Default: \"Lightweight mode\".",
+      "description": "Select \"Comprehensive mode\" if you prefer more accurate results (consumes more tokens). Default: \"Lightweight mode\".",
       "defaultValue": "Lightweight mode"
     }
   ],
@@ -95,21 +95,51 @@
       "name": "Search Web",
       "httpAction": {
         "id": "1ee8a09f-cdb9-4d51-921a-b917deb6b64b",
-        "url": "https://cloud.typingmind.com/api/plugins/serp/search?api_key={serpAPIKey}&engine=google&q={query}&json_restrictor=organic_results[].{title,snippet,source,link}",
+        "url": "https://ted-n8n.ddns.net/webhook/brave-search-typingmind?query={query}&count={count}&country={country}&search_lang={search_lang}&freshness={freshness}",
         "name": "",
-        "method": "GET"
+        "method": "GET",
+        "hasHeaders": true,
+        "requestHeaders": "{\n    \"Accept\": \"application/json\",\n    \"Accept-Encoding\": \"gzip\",\n    \"Authorization\": \"Bearer {n8n_token}\"\n  }"
       },
       "openaiSpec": {
         "name": "research_tool_search_web",
         "parameters": {
           "type": "object",
           "required": [
-            "query"
+            "query",
+            "count",
+            "country",
+            "search_lang"
           ],
           "properties": {
             "query": {
               "type": "string",
-              "description": "The search term to look up on the web. Be specific and include relevant keywords for better results. For technical queries, include version numbers or dates if relevant."
+              "description": "The search term to look up on the web. Be specific and use keywords for better results. For technical queries, include version numbers or dates if relevant. Keep the query simple - no nesting with parentheses or similar."
+            },
+            "count": {
+              "type": "number",
+              "default": 5,
+              "description": "Number of results to return (default: 5, max: 20)"
+            },
+            "country": {
+              "type": "string",
+              "default": "ALL",
+              "description": "The 2 character country code where the search results come from. Must not be CZ - use ALL instead!"
+            },
+            "freshness": {
+              "enum": [
+                "pd",
+                "pw",
+                "pm",
+                "py"
+              ],
+              "type": "string",
+              "description": "Filters search results by when they were discovered. pd: last 24 hours, pw: last 7 days, pm: last 31 days, py: last 365 days. Omit this parameter if no freshness filter is needed."
+            },
+            "search_lang": {
+              "type": "string",
+              "default": "en-gb",
+              "description": "The 2 or more character language code for which the search results are provided."
             },
             "explanation": {
               "type": "string",
@@ -117,67 +147,34 @@
             }
           }
         },
-        "description": "Search the web using SERP API (Google search engine) for real-time information about any topic. Use this tool when you need up-to-date information that might not be available in your training data, or when you need to verify current facts. The search results will include relevant snippets and URLs from web pages. This is particularly useful for questions about current events, technology updates, or any topic that requires recent information."
+        "description": "Search the web using Brave Search (via n8n webhook) for real-time information about any topic. Use this tool when you need up-to-date information that might not be available in your training data, or when you need to verify current facts. The search results will include relevant snippets and URLs from web pages. This is particularly useful for questions about current events, technology updates, or any topic that requires recent information."
       },
       "outputType": "respond_to_ai",
       "implementationType": "http"
     },
     {
       "id": "40e566af-f012-4dca-90c3-9965f391bfc2",
-      "code": "async function extract_web_page(params, userSettings) {\n  if (userSettings.researchMode === 'Comprehensive mode') {\n    return await fetch('https://api.firecrawl.dev/v2/scrape', {\n      method: 'POST',\n      headers: {\n        'Content-Type': 'application/json',\n        Authorization: 'Bearer ' + userSettings.firecrawlApiKey,\n      },\n      body: JSON.stringify({\n        url: params.pageUrl,\n        formats: ['markdown'],\n        onlyMainContent: true,\n      }),\n    }).then((r) => r.json());\n  } else {\n    const json = await fetch('https://api.firecrawl.dev/v2/scrape', {\n      method: 'POST',\n      headers: {\n        'Content-Type': 'application/json',\n        Authorization: 'Bearer ' + userSettings.firecrawlApiKey,\n      },\n      body: JSON.stringify({\n        url: params.pageUrl,\n        formats: [\n          {\n            type: 'json',\n            prompt: params.extractInstructions,\n          },\n        ],\n      }),\n    }).then((r) => r.json());\n\n    if (userSettings.researchMode === 'Dynamic mode') {\n      return {\n        result: json,\n        furtherInstructions:\n          'This result is extracted from the original web page. Use the \"read_full_web_page_content\" tool if you need to read the full content of the web page.',\n      };\n    } else {\n      return json;\n    }\n  }\n}\n",
-      "name": "Extract Web Page",
-      "httpAction": {
-        "id": "fe67c640-6a5b-4ff8-bf44-394bccd0d109",
-        "url": "https://api.firecrawl.dev/v1/scrape",
-        "name": "",
-        "method": "POST",
-        "hasBody": true,
-        "hasHeaders": true,
-        "requestBody": "{\n    \"url\": \"{pageUrl}\",\n    \"formats\": [\n        \"markdown\"\n    ],\n    \"onlyMainContent\": true\n}",
-        "requestHeaders": "{\n    \"Content-Type\": \"application/json\",\n    \"Authorization\": \"Bearer {firecrawlApiKey}\"\n}"
-      },
+      "code": "async function read_web_page_content(params, userSettings) {\n  const { url } = params;\n  const { pluginServer } = userSettings;\n\n  if (!pluginServer) {\n    throw new Error(\n      'Missing plugin server URL. Please set it in the plugin settings.'\n    );\n  }\n\n  const cleanPluginServer = pluginServer.replace(/\\/$/, '');\n\n  const response = await fetch(\n    `${cleanPluginServer}/web-page-reader/get-content?url=${encodeURIComponent(url)}`\n  );\n\n  if (!response.ok) {\n    throw new Error(\n      `Failed to fetch web content: ${response.status} - ${response.statusText}`\n    );\n  }\n\n  const data = await response.json();\n  return data.responseObject;\n}",
+      "name": "Read Web Page",
       "openaiSpec": {
-        "name": "extract_web_page",
+        "name": "read_web_page_content",
         "parameters": {
           "type": "object",
           "required": [
-            "pageUrl"
+            "url"
           ],
           "properties": {
-            "pageUrl": {
+            "url": {
               "type": "string",
-              "description": "The URL of the web page to scrape for content."
+              "description": "The URL of the web page to read."
             },
-            "extractInstructions": {
+            "explanation": {
               "type": "string",
-              "description": "Describe the data you want to extract from the web page."
+              "description": "One sentence explanation as to why this tool is being used, and how it contributes to the goal."
             }
           }
         },
-        "description": "Retrieves the text content of a web page in markdown format. When in Lightweight Mode, this tool returns an extracted content with only the answer based on the extractInstructions. When in Comprehensive Mode, this tool returns the full content of the web page."
-      },
-      "outputType": "respond_to_ai",
-      "implementationType": "javascript"
-    },
-    {
-      "id": "16f3fbef-df16-4833-8d43-be7e71e8a912",
-      "code": "async function read_full_web_page_content(params, userSettings) {\n  if (userSettings.researchMode !== 'Lightweight mode') {\n    return await fetch('https://api.firecrawl.dev/v2/scrape', {\n      method: 'POST',\n      headers: {\n        'Content-Type': 'application/json',\n        Authorization: 'Bearer ' + userSettings.firecrawlApiKey,\n      },\n      body: JSON.stringify({\n        url: params.pageUrl,\n        formats: ['markdown'],\n        onlyMainContent: true,\n      }),\n    }).then((r) => r.json());\n  } else {\n    return \"\\\"read_full_web_page_content\\\" is not allowed in \" + userSettings.researchMode;\n  }\n}",
-      "name": "Read Full Web Page",
-      "openaiSpec": {
-        "name": "read_full_web_page_content",
-        "parameters": {
-          "type": "object",
-          "required": [
-            "pageUrl"
-          ],
-          "properties": {
-            "pageUrl": {
-              "type": "string",
-              "description": "The URL of the web page to scrape for content."
-            }
-          }
-        },
-        "description": "Retrieves the full text content of a web page in markdown format, this will return the full content of the website that may be extremely long."
+        "description": "Reads the full text content of a web page via the Plugin Server. Returns plain text stripped of HTML tags. Use this tool to get the detailed content of a web page when search snippets are not sufficient."
       },
       "outputType": "respond_to_ai",
       "implementationType": "javascript"
@@ -191,7 +188,7 @@
       "name": "Deep Research Mode",
       "method": "GET",
       "source": "static",
-      "staticContent": "<USER_INPUT>\n**Deep Research**: Enabled.\n**Research Mode**: {researchMode}\n</USER_INPUT>\n\nYou are an AI research assistant tasked with conducting deep, thorough research on a given topic. Your goal is to gather comprehensive information, analyze it, and present a well-structured report.\n\nResearch Mode Instructions:\n- **Lightweight Mode**: In lightweight mode, Deep Research will attempt to extract data from online sources using the extract_web_page tool, which saves tokens at a cost of reduced data accuracy. This is the default mode.\n- **Comprehensive Mode**: Deep Research will read the full content of the online sources to determine the final answer. If the web pages have a lot of content, it can risk consuming a lot of tokens, which is expensive and may exceed the model's context length limit.\n- **Dynamic Mode**: Deep Research will run in Lightweight Mode by default, but may opt in to read full web page content when needed (using the \"read_full_web_page_content\" tool) to get the most accurate answer.\n\nFollow these instructions carefully:\n\n1. Begin by reading the research task:\n<research_task>\n{lastUserMessage}\n</research_task>\n\n2. Create an initial research plan using the planning tool to create a todo list. This plan should outline the main areas of investigation and the steps you'll take to complete the task. Update the status of each todo list item as you progress through your research.\n\n3. Conduct at least one web search to gather information. In deep research mode, all information presented must come from the sources of your research. Before using any tools, provide your reasoning for choosing that particular tool.\n\n4. Follow these guidelines while gathering information:\n   - Collect all necessary data to carry out the research task concisely and thoroughly.\n   - Use bullet points or numbered lists for clarity when appropriate.\n   - Don't ask for unnecessary information or information already provided.\n   - Continue researching until all items in your todo list are completed.\n   - Use available tools one at a time to find the requested information.\n   - Gather data from multiple sources to ensure accuracy and comprehensiveness.\n\n5. Cite all sources used with links to the original websites.\n\n6. Once you have gathered all the information, compile a comprehensive report. Use markdown formatting (such as tables and bullet points) and tools (like graphs) to present your findings effectively. Highlight any surprising or interesting details you discovered during your research.\n\n7. Output your final report with the following structure\n   \n   [Title of report]\n   [Include your comprehensive report here, using appropriate formatting]\n   \n   Interesting Findings:\n   [Highlight surprising or noteworthy details]\n   \n   Sources:\n   [List all sources with links]",
+      "staticContent": "<USER_INPUT>\n**Deep Research**: Enabled.\n**Research Mode**: {researchMode}\n</USER_INPUT>\n\nYou are an AI research assistant tasked with conducting deep, thorough research on a given topic. Your goal is to gather comprehensive information, analyze it, and present a well-structured report.\n\nResearch Mode Instructions:\n- **Lightweight Mode**: In lightweight mode, Deep Research uses search result snippets from Brave Search to gather information. Read individual web pages using the `read_web_page_content` tool only when the snippets do not contain enough detail to answer the question. This is the default mode.\n- **Comprehensive Mode**: Deep Research reads the full content of each relevant web page using the `read_web_page_content` tool to ensure the most accurate and complete answer. This consumes more tokens and may take longer.\n\nFollow these instructions carefully:\n\n1. Begin by reading the research task:\n<research_task>\n{lastUserMessage}\n</research_task>\n\n2. Create an initial research plan using the planning tool to create a todo list. This plan should outline the main areas of investigation and the steps you'll take to complete the task. Update the status of each todo list item as you progress through your research.\n\n3. Conduct at least one web search to gather information. In deep research mode, all information presented must come from the sources of your research. Before using any tools, provide your reasoning for choosing that particular tool.\n\n4. Follow these guidelines while gathering information:\n   - Collect all necessary data to carry out the research task concisely and thoroughly.\n   - Use bullet points or numbered lists for clarity when appropriate.\n   - Don't ask for unnecessary information or information already provided.\n   - Continue researching until all items in your todo list are completed.\n   - Use available tools one at a time to find the requested information.\n   - Gather data from multiple sources to ensure accuracy and comprehensiveness.\n   - Keep search queries simple - avoid nesting with parentheses or complex operators.\n\n5. Cite all sources used with links to the original websites.\n\n6. Once you have gathered all the information, compile a comprehensive report. Use markdown formatting (such as tables and bullet points) and tools (like graphs) to present your findings effectively. Highlight any surprising or interesting details you discovered during your research.\n\n7. Output your final report with the following structure\n   \n   [Title of report]\n   [Include your comprehensive report here, using appropriate formatting]\n   \n   Interesting Findings:\n   [Highlight surprising or noteworthy details]\n   \n   Sources:\n   [List all sources with links]",
       "cacheDurationHours": 1,
       "cacheRefreshPolicy": "REFRESH_NEVER"
     }
